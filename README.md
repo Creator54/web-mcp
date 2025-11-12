@@ -116,6 +116,23 @@ You can configure Brave Search with an API key for better results:
 
 If no API key is provided, the tool automatically falls back to web scraping Brave Search results.
 
+## Docker Deployment
+
+The project can be containerized for easy deployment and MCP integration:
+
+### Building the image
+
+```bash
+docker build -t web-mcp .
+```
+
+### Running the MCP server
+
+```bash
+# Run interactively for MCP STDIO transport
+docker run -i web-mcp python -m web_mcp.fastmcp_server
+```
+
 ## License
 
 [MIT License](./LICENSE)
