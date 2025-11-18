@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Dict, Optional, Union, Literal
 import typer
+import click
 import json
 import os
 import re
@@ -346,23 +347,33 @@ def search_brave(query: str, num_results: int = 5, brave_api_key: Optional[str] 
 def search_brave_scrape(query: str, num_results: int = 5) -> List[Dict[str, str]]:
     """
     Search Brave Search using web scraping method (no API key required)
+    Note: Brave uses AWS WAF with CAPTCHA, so this may not work reliably.
+    For production use, get a free API key at https://brave.com/search/api/
     """
+    click.echo("Note: Brave Search uses CAPTCHA protection. For reliable results, use BRAVE_API_KEY.", err=True)
+    click.echo("Get a free API key at: https://brave.com/search/api/", err=True)
+    
     url = "https://search.brave.com/search"
-    params = {
-        'q': query
-    }
+    params = {'q': query, 'source': 'web'}
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1"
     }
 
     try:
         if IMPERSONATE_AVAILABLE:
-            response = requests.get(url, params=params, headers=headers, impersonate="chrome110")
+            response = requests.get(url, params=params, impersonate="chrome120", timeout=15)
         else:
-            response = requests.get(url, params=params, headers=headers)
+            response = requests.get(url, params=params, headers=headers, timeout=15)
 
         if response.status_code != 200:
+            if response.status_code == 405:
+                raise Exception(f"Brave Search blocked the request with CAPTCHA (status {response.status_code}). An API key is required.")
             raise Exception(f"Request failed with status code {response.status_code}")
 
         # Parse the HTML response
@@ -439,7 +450,9 @@ def search_brave_scrape(query: str, num_results: int = 5) -> List[Dict[str, str]
 
     except Exception as e:
         click.echo(f"Error performing Brave web scraping: {str(e)}", err=True)
-        return []
+        click.echo("Falling back to DuckDuckGo search...", err=True)
+        # Fallback to DuckDuckGo when Brave fails
+        return search_duckduckgo(query, num_results)
 
 
 
