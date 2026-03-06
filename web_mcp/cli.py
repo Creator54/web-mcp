@@ -282,19 +282,42 @@ def browse_web_page(url: str, format: str = "text") -> Dict[str, Union[str, bool
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     }
 
+    def follow_meta_refresh(
+        url: str, headers: dict, depth: int = 0
+    ) -> Optional[requests.Response]:
+        """Follow meta refresh redirects."""
+        if depth > 5:
+            return None
+        try:
+            if IMPERSONATE_AVAILABLE:
+                response = requests.get(
+                    url, headers=headers, impersonate="chrome110", timeout=10
+                )
+            else:
+                response = requests.get(url, headers=headers, timeout=10, verify=False)
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            meta_refresh = soup.find("meta", attrs={"http-equiv": "refresh"})
+            if meta_refresh:
+                content = meta_refresh.get("content", "")
+                if ";" in content:
+                    _, url_part = content.split(";", 1)
+                    if "url=" in url_part.lower():
+                        new_url = url_part.split("=", 1)[1].strip()
+                        if not new_url.startswith(("http://", "https://")):
+                            from urllib.parse import urljoin
+
+                            new_url = urljoin(url, new_url)
+                        return follow_meta_refresh(new_url, headers, depth + 1)
+            return response
+        except Exception:
+            return None
+
     try:
-        if IMPERSONATE_AVAILABLE:
-            response = requests.get(
-                url,
-                headers=headers,
-                impersonate="chrome110",
-                timeout=10,
-                allow_redirects=True,
-            )
-        else:
-            response = requests.get(
-                url, headers=headers, timeout=10, verify=False, allow_redirects=True
-            )
+        response = follow_meta_refresh(url, headers)
+
+        if response is None:
+            return {"error": "Failed to fetch page", "url": url}
 
         final_url = response.url
         redirect_note = ""
