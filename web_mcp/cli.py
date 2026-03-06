@@ -53,6 +53,8 @@ def callback(
             else:
                 print(f"Title: {result['title']}")
                 print(f"URL: {result['url']}")
+                if result.get("redirect_note"):
+                    print(result["redirect_note"])
                 print("\nContent:")
                 print(result["content"])
         elif query:
@@ -283,15 +285,26 @@ def browse_web_page(url: str, format: str = "text") -> Dict[str, Union[str, bool
     try:
         if IMPERSONATE_AVAILABLE:
             response = requests.get(
-                url, headers=headers, impersonate="chrome110", timeout=10
+                url,
+                headers=headers,
+                impersonate="chrome110",
+                timeout=10,
+                allow_redirects=True,
             )
         else:
-            response = requests.get(url, headers=headers, timeout=10, verify=False)
+            response = requests.get(
+                url, headers=headers, timeout=10, verify=False, allow_redirects=True
+            )
+
+        final_url = response.url
+        redirect_note = ""
+        if final_url != url:
+            redirect_note = f"\n(Redirected to: {final_url})"
 
         if response.status_code != 200:
             return {
                 "error": f"Failed to fetch page: HTTP {response.status_code}",
-                "url": url,
+                "url": final_url,
             }
 
         # Use readability to extract the main content
@@ -303,9 +316,10 @@ def browse_web_page(url: str, format: str = "text") -> Dict[str, Union[str, bool
             # For HTML format, return the cleaned HTML content
             return {
                 "title": title,
-                "url": url,
+                "url": final_url,
                 "content": content,
                 "content_type": format,
+                "redirect_note": redirect_note,
             }
         else:  # text format
             # Clean up the content
@@ -352,9 +366,10 @@ def browse_web_page(url: str, format: str = "text") -> Dict[str, Union[str, bool
 
             return {
                 "title": title,
-                "url": url,
+                "url": final_url,
                 "content": text_content,
                 "content_type": format,
+                "redirect_note": redirect_note,
             }
 
     except Exception as e:
@@ -604,10 +619,10 @@ def search(
     Search the web for a query
 
     Examples:
-      web-search search python programming
-      web-search search "machine learning" -n 10 --format json
-      web-search search openai --engine brave
-      web-search search openai --lite
+      web search python programming
+      web search "machine learning" -n 10 --format json
+      web search openai --engine brave
+      web search openai --lite
     """
     search_query = " ".join(query)
 
@@ -663,8 +678,8 @@ def browse(
     Browse a web page and extract its content
 
     Examples:
-      web-search browse https://example.com
-      web-search browse https://wikipedia.org --format html
+      web browse https://example.com
+      web browse https://wikipedia.org --format html
     """
     # Validate and normalize URL
     if not url.startswith(("http://", "https://")):
@@ -677,6 +692,8 @@ def browse(
     else:
         print(f"Title: {result['title']}")
         print(f"URL: {result['url']}")
+        if result.get("redirect_note"):
+            print(result["redirect_note"])
         print("\nContent:")
         print(result["content"])
 
