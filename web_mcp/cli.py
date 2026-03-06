@@ -40,6 +40,7 @@ app = typer.Typer(
 def callback(
     ctx: typer.Context,
     browse: Optional[str] = typer.Option(None, "-b", "--browse", help="Browse a URL"),
+    query: Optional[str] = typer.Argument(None, help="Search query"),
 ):
     """Show help if no command is provided."""
     if ctx.invoked_subcommand is None:
@@ -54,6 +55,16 @@ def callback(
                 print(f"URL: {result['url']}")
                 print("\nContent:")
                 print(result["content"])
+        elif query:
+            from web_mcp.cli import search_duckduckgo
+
+            results = search_duckduckgo(query, 5)
+            for i, r in enumerate(results, 1):
+                print(f"{i}. {r.get('title', 'No title')}")
+                print(f"   {r.get('link', '')}")
+                if r.get("snippet"):
+                    print(f"   {r.get('snippet')}")
+                print()
 
 
 class SearchEngine(Enum):
