@@ -3,6 +3,7 @@
 import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*Unverified HTTPS.*")
 
 from dataclasses import dataclass
 from enum import Enum
@@ -35,11 +36,24 @@ app = typer.Typer(
 )
 
 
-@app.callback(invoke_without_command=True)
-def callback(ctx: typer.Context):
+@app.callback(invoke_without_command=True, no_args_is_help=True)
+def callback(
+    ctx: typer.Context,
+    browse: Optional[str] = typer.Option(None, "-b", "--browse", help="Browse a URL"),
+):
     """Show help if no command is provided."""
     if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
+        if browse:
+            from web_mcp.cli import browse_web_page
+
+            result = browse_web_page(browse, "text")
+            if "error" in result:
+                print(f"Error: {result['error']}")
+            else:
+                print(f"Title: {result['title']}")
+                print(f"URL: {result['url']}")
+                print("\nContent:")
+                print(result["content"])
 
 
 class SearchEngine(Enum):
@@ -261,7 +275,7 @@ def browse_web_page(url: str, format: str = "text") -> Dict[str, Union[str, bool
                 url, headers=headers, impersonate="chrome110", timeout=10
             )
         else:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=10, verify=False)
 
         if response.status_code != 200:
             return {

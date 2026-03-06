@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-web-search = "web_mcp.cli:app"
+web = "web_mcp.cli:app"
 
 [build-system]
 requires = ["setuptools", "wheel"]

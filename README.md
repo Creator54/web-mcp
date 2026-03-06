@@ -13,11 +13,13 @@ uv pip install git+https://github.com/creator54/web-mcp.git
 ## Usage
 
 ```bash
-# Search
-web-search search "query" -n 10 --engine brave --format json
+# Search (direct or subcommand)
+web search "query"
+web "query" -n 10 --engine brave --format json
 
-# Browse
-web-search browse https://example.com
+# Browse (flag or subcommand)
+web -b https://example.com
+web browse https://example.com
 ```
 
 ## MCP Server
