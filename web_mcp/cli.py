@@ -5,104 +5,42 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message=".*Unverified HTTPS.*")
 
-from dataclasses import dataclass
-from enum import Enum
-from typing import List, Dict, Optional, Union, Literal
+from typing import List, Dict, Optional, Union
 import typer
 import click
 import json
 import os
 import re
-import requests
 
-# Try to use curl_cffi for better browser impersonation, fall back to requests
-try:
-    from curl_cffi import requests
-
-    IMPERSONATE_AVAILABLE = True
-except ImportError:
-    import requests
-
-    IMPERSONATE_AVAILABLE = False
+# curl_cffi is required for browser impersonation
+from curl_cffi import requests
 
 from bs4 import BeautifulSoup
-import urllib.parse
 from readability import Document
 
 
 app = typer.Typer(
-    help="CLI tool for searching the web and browsing web pages.",
-    invoke_without_command=True,
+    help="CLI tool for searching the web and browsing web pages."
 )
 
 
-@app.callback(invoke_without_command=True, no_args_is_help=True)
-def callback(
-    ctx: typer.Context,
-    browse: Optional[str] = typer.Option(None, "-b", "--browse", help="Browse a URL"),
-    query: Optional[str] = typer.Argument(None, help="Search query"),
-):
-    """Show help if no command is provided."""
-    if ctx.invoked_subcommand is None:
-        if browse:
-            from web_mcp.cli import browse_web_page
+def format_search_results(results: List[Dict[str, str]], query: str, engine: str) -> str:
+    """Format search results into a readable text string."""
+    if not results:
+        return "No results found or error occurred."
+    
+    output = [f"Search results for: {query} ({engine})\n"]
+    for i, result in enumerate(results, 1):
+        title = result.get("title", "No title")
+        link = result.get("link", "")
+        snippet = result.get("snippet", "")
 
-            result = browse_web_page(browse, "text")
-            if "error" in result:
-                print(f"Error: {result['error']}")
-            else:
-                print(f"Title: {result['title']}")
-                print(f"URL: {result['url']}")
-                if result.get("redirect_note"):
-                    print(result["redirect_note"])
-                print("\nContent:")
-                print(result["content"])
-        elif query:
-            from web_mcp.cli import search_duckduckgo
-
-            results = search_duckduckgo(query, 5)
-            for i, r in enumerate(results, 1):
-                print(f"{i}. {r.get('title', 'No title')}")
-                print(f"   {r.get('link', '')}")
-                if r.get("snippet"):
-                    print(f"   {r.get('snippet')}")
-                print()
-
-
-class SearchEngine(Enum):
-    """Enumeration for supported search engines."""
-
-    DUCKDUCKGO = "duckduckgo"
-    BRAVE = "brave"
-
-
-class OutputFormat(Enum):
-    """Enumeration for output formats."""
-
-    TEXT = "text"
-    JSON = "json"
-    JSON_COMPACT = "json-compact"
-
-
-@dataclass
-class SearchResult:
-    """Represents a single search result."""
-
-    title: str
-    link: str
-    snippet: str
-    result_type: str = "generic"
-
-
-@dataclass
-class BrowseResult:
-    """Represents a browsing result."""
-
-    title: str
-    url: str
-    content: str
-    content_type: str = "text"
-    error: Optional[str] = None
+        output.append(f"{i}. {title}")
+        output.append(f"   {link}")
+        if snippet:
+            output.append(f"   {snippet}")
+        output.append("")
+    return "\n".join(output)
 
 
 def search_duckduckgo(query: str, num_results: int = 5) -> List[Dict[str, str]]:
@@ -125,12 +63,9 @@ def search_duckduckgo(query: str, num_results: int = 5) -> List[Dict[str, str]]:
     }
 
     try:
-        if IMPERSONATE_AVAILABLE:
-            response = requests.get(
-                url, params=params, headers=headers, impersonate="chrome110"
-            )
-        else:
-            response = requests.get(url, params=params, headers=headers)
+        response = requests.get(
+            url, params=params, headers=headers, impersonate="chrome110"
+        )
 
         if response.status_code != 200:
             raise Exception(f"Request failed with status code {response.status_code}")
@@ -231,12 +166,9 @@ def search_duckduckgo_lite(query: str, num_results: int = 5) -> List[Dict[str, s
     }
 
     try:
-        if IMPERSONATE_AVAILABLE:
-            response = requests.post(
-                url, data=data, headers=headers, impersonate="chrome110"
-            )
-        else:
-            response = requests.post(url, data=data, headers=headers)
+        response = requests.post(
+            url, data=data, headers=headers, impersonate="chrome110"
+        )
 
         if response.status_code != 200:
             raise Exception(f"Request failed with status code {response.status_code}")
@@ -289,12 +221,9 @@ def browse_web_page(url: str, format: str = "text") -> Dict[str, Union[str, bool
         if depth > 5:
             return None
         try:
-            if IMPERSONATE_AVAILABLE:
-                response = requests.get(
-                    url, headers=headers, impersonate="chrome110", timeout=10
-                )
-            else:
-                response = requests.get(url, headers=headers, timeout=10, verify=False)
+            response = requests.get(
+                url, headers=headers, impersonate="chrome110", timeout=10
+            )
 
             soup = BeautifulSoup(response.text, "html.parser")
             meta_refresh = soup.find("meta", attrs={"http-equiv": "refresh"})
@@ -369,23 +298,7 @@ def browse_web_page(url: str, format: str = "text") -> Dict[str, Union[str, bool
             # Clean up the text: remove extra whitespace and normalize newlines
             import re
 
-            # Remove extra whitespace and normalize newlines
-            lines = [line.strip() for line in text_content.splitlines() if line.strip()]
-            text_content = "\n".join(lines)
-            # Replace multiple spaces with single space
-            text_content = re.sub(r"[ \t]{2,}", " ", text_content)
-            # Remove lines that are just special characters (like citation markers)
-            lines = [
-                line
-                for line in text_content.split("\n")
-                if not re.match(
-                    r"^[\[\(]?\d+[\]\)]?$|^[\[\(]?\s*edit\s*[\]\)]?$|^[^\w\s]*$",
-                    line.strip(),
-                )
-            ]
-            text_content = "\n".join(lines)
-            # Remove leading/trailing whitespace
-            text_content = text_content.strip()
+            text_content = re.sub(r"\s+", " ", text_content).strip()
 
             return {
                 "title": title,
@@ -422,12 +335,9 @@ def search_brave(
         }
 
         try:
-            if IMPERSONATE_AVAILABLE:
-                response = requests.get(
-                    url, params=params, headers=headers, impersonate="chrome110"
-                )
-            else:
-                response = requests.get(url, params=params, headers=headers)
+            response = requests.get(
+                url, params=params, headers=headers, impersonate="chrome110"
+            )
 
             if response.status_code != 200:
                 raise Exception(
@@ -485,12 +395,9 @@ def search_brave_scrape(query: str, num_results: int = 5) -> List[Dict[str, str]
     }
 
     try:
-        if IMPERSONATE_AVAILABLE:
-            response = requests.get(
-                url, params=params, impersonate="chrome120", timeout=15
-            )
-        else:
-            response = requests.get(url, params=params, headers=headers, timeout=15)
+        response = requests.get(
+            url, params=params, impersonate="chrome120", timeout=15
+        )
 
         if response.status_code != 200:
             if response.status_code == 405:
@@ -504,34 +411,10 @@ def search_brave_scrape(query: str, num_results: int = 5) -> List[Dict[str, str]
 
         results = []
 
-        # Look for result elements - brave search results often have specific class patterns
-        # Results may be in <div> elements with certain classes or data attributes
-        # Check for the main results container
-        results_container = soup.find("div", id="results")
-        if results_container:
-            # Find all result items within the container
-            result_items = results_container.find_all(
-                "div",
-                class_=lambda x: (
-                    x
-                    and any(
-                        class_name in x.lower()
-                        for class_name in ["snippet", "result", "web", "svelte"]
-                    )
-                ),
-            )
-        else:
-            # Alternative: look for result items more broadly
-            result_items = soup.find_all(
-                "div",
-                class_=lambda x: (
-                    x
-                    and any(
-                        keyword in x.lower()
-                        for keyword in ["result", "web", "snippet", "svelte"]
-                    )
-                ),
-            )
+        container = soup.find("div", id="results") or soup
+        result_items = container.find_all(
+            "div", class_=lambda x: x and any(k in x.lower() for k in ["snippet", "result", "web", "svelte"])
+        )
 
         for item in result_items:
             if len(results) >= num_results:
@@ -560,23 +443,8 @@ def search_brave_scrape(query: str, num_results: int = 5) -> List[Dict[str, str]
                     if title:
                         title = str(title).strip()
 
-                # Find the snippet/description
-                # Look for sibling elements that may contain the description
                 snippet_elem = item.find(
-                    ["p", "span", "div"],
-                    class_=lambda x: (
-                        x
-                        and any(
-                            keyword in x.lower()
-                            for keyword in [
-                                "description",
-                                "snippet",
-                                "t-secondary",
-                                "t-tertiary",
-                                "text",
-                            ]
-                        )
-                    ),
+                    lambda t: t.name in ["p", "span", "div"] and t.get("class") and any(k in " ".join(t["class"]).lower() for k in ["description", "snippet", "t-secondary", "t-tertiary", "text"])
                 )
 
                 if not snippet_elem:
@@ -632,11 +500,6 @@ def search(
         "--engine",
         help="Search engine to use: duckduckgo (default) or brave",
     ),
-    lite: bool = typer.Option(
-        False,
-        "--lite",
-        help="Use DuckDuckGo Lite (HTML) instead of API (only applicable for DuckDuckGo)",
-    ),
 ):
     """
     Search the web for a query
@@ -645,15 +508,12 @@ def search(
       web search python programming
       web search "machine learning" -n 10 --format json
       web search openai --engine brave
-      web search openai --lite
     """
     search_query = " ".join(query)
 
     # Perform search based on selected engine and method
     if engine == "brave":
         results = search_brave(search_query, num_results)
-    elif lite:
-        results = search_duckduckgo_lite(search_query, num_results)
     else:
         results = search_duckduckgo(search_query, num_results)
 
@@ -674,20 +534,7 @@ def search(
         # Output as compact JSON
         print(json.dumps(results))
     else:  # text format
-        if results:
-            print(f"\nSearch results for: {search_query} ({engine})\n")
-            for i, result in enumerate(results, 1):
-                title = result.get("title", "No title")
-                link = result.get("link", "")
-                snippet = result.get("snippet", "")
-
-                print(f"{i}. {title}")
-                print(f"   {link}")
-                if snippet:
-                    print(f"   {snippet}")
-                print()
-        else:
-            print("No results found or error occurred.")
+        print("\n" + format_search_results(results, search_query, engine))
 
 
 @app.command()

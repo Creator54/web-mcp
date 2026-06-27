@@ -13,12 +13,11 @@ uv pip install git+https://github.com/creator54/web-mcp.git
 ## Usage
 
 ```bash
-# Search (direct or subcommand)
+# Search
 web search "query"
-web "query" -n 10 --engine brave --format json
+web search "query" -n 10 --engine brave --format json
 
-# Browse (flag or subcommand)
-web -b https://example.com
+# Browse
 web browse https://example.com
 ```
 
